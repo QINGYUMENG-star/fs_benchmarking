@@ -1,0 +1,10 @@
+services:
+  pipeline:
+    build:
+      context: ./pipeline
+      dockerfile: Dockerfile
+    image: fs-pipeline:1.0
+    working_dir: /app
+    volumes:
+      - ./data:/data:ro
+      - ./output:/output

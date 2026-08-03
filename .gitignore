@@ -1,0 +1,10 @@
+.DS_Store
+__pycache__/
+*.pyc
+*.pyo
+*.log
+cookies.txt
+logs/
+result/
+results/
+.ipynb_checkpoints/
