@@ -44,13 +44,36 @@
 
 <h2 id="install">2 Installation</h2>
 
-<h3>2.1 Use the published container image</h3>
-<pre class="card-pre"><code># Apptainer / NeSI
-apptainer pull pipeline.sif docker://nolanzz/pipeline:latest
+<h3>2.1 Use the published container images</h3>
+<p>
+  Two published image variants are available:
+</p>
+<ul>
+  <li>
+    <strong>CPU image:</strong> <code>nolanzz/pipeline:latest</code> and <code>nolanzz/pipeline:cpu</code>.
+    This is the default image used throughout the examples below and is suitable for local computers and CPU-based HPC jobs.
+  </li>
+  <li>
+    <strong>GPU image:</strong> <code>nolanzz/pipeline:gpu</code>.
+    This image is intended for systems with a compatible NVIDIA GPU, NVIDIA driver, and CUDA container support.
+  </li>
+</ul>
+<pre class="card-pre"><code># Apptainer / NeSI: CPU image
+apptainer pull pipeline-cpu.sif docker://nolanzz/pipeline:latest
 
-# Docker
+# Apptainer / NeSI: GPU image
+apptainer pull pipeline-gpu.sif docker://nolanzz/pipeline:gpu
+
+# Docker: CPU image
 docker pull nolanzz/pipeline:latest
+
+# Docker: GPU image
+docker pull nolanzz/pipeline:gpu
     </code></pre>
+<p class="muted">
+  The CPU image is published for both <code>linux/amd64</code> and <code>linux/arm64</code>.
+  The GPU image is primarily intended for <code>linux/amd64</code> systems with NVIDIA CUDA support.
+</p>
 
 <h3>2.2 Build the Docker image locally from source</h3>
 <p>
@@ -88,9 +111,9 @@ docker run --rm fs-pipeline --help
   the image starts successfully and exposes the pipeline CLI.
 </p>
 <p class="muted">
-  Available platforms depend on the image variants published in the container manifest.
-  Before use, you can check the supported platforms with
-  <code>docker buildx imagetools inspect nolanzz/pipeline:latest</code>.
+  Available platforms depend on the selected image variant. You can inspect the CPU image manifest with
+  <code>docker buildx imagetools inspect nolanzz/pipeline:latest</code> and the GPU image manifest with
+  <code>docker buildx imagetools inspect nolanzz/pipeline:gpu</code>.
   Docker and Apptainer will use a compatible image variant when one is available for the host platform.
 </p>
 <p class="muted">
@@ -104,23 +127,41 @@ docker run --rm fs-pipeline --help
   <code>/data</code>, and mount a separate host directory to <code>/results</code>. Paths supplied to
   <code>--input_path</code> and <code>--out_dir</code> must always use container-side paths.
 </p>
-<pre class="card-pre"><code># Bundled example: only mount an output directory
+<pre class="card-pre"><code># Bundled example with the CPU image: only mount an output directory
 mkdir -p result
 
-apptainer run --bind "$(pwd)/result:/results" pipeline.sif
+apptainer run --bind "$(pwd)/result:/results" pipeline-cpu.sif
 
 docker run --rm -v "$PWD/result:/results" nolanzz/pipeline:latest
 
-# User-provided data: mount both input and output directories
+# Bundled example with the GPU image
+apptainer run --nv --bind "$(pwd)/result:/results" pipeline-gpu.sif
+
+docker run --rm --gpus all \
+  -v "$PWD/result:/results" \
+  nolanzz/pipeline:gpu
+
+# User-provided data with the CPU image: mount both input and output directories
 apptainer run \
   --bind "/Users/alice/project/data:/data" \
   --bind "/Users/alice/project/results:/results" \
-  pipeline.sif
+  pipeline-cpu.sif
 
 docker run --rm \
   -v "/Users/alice/project/data:/data:ro" \
   -v "/Users/alice/project/results:/results" \
-  nolanzz/pipeline:latest</code></pre>
+  nolanzz/pipeline:latest
+
+# User-provided data with the GPU image
+apptainer run --nv \
+  --bind "/Users/alice/project/data:/data" \
+  --bind "/Users/alice/project/results:/results" \
+  pipeline-gpu.sif
+
+docker run --rm --gpus all \
+  -v "/Users/alice/project/data:/data:ro" \
+  -v "/Users/alice/project/results:/results" \
+  nolanzz/pipeline:gpu</code></pre>
 
 <h2 id="usage">3 Minimal Usage</h2>
 
@@ -149,13 +190,15 @@ docker run --rm \
 
 <h3>3.1 Quick test with the bundled ALLAML example</h3>
 <p class="muted">
-  Run the commands below from any host directory. The input dataset is read from the container image at
-  <code>/app/data/ALLAML_10.npz</code>. The local <code>result/</code> directory is mounted to
-  <code>/results</code> so that outputs are saved on the host.
+  Run the commands below from any host directory. These examples use the CPU image by default. The input dataset is
+  read from the container image at <code>/app/data/ALLAML_10.npz</code>. The local <code>result/</code> directory is mounted
+  to <code>/results</code> so that outputs are saved on the host. For GPU execution, use
+  <code>pipeline-gpu.sif</code> together with <code>apptainer run --nv</code>, or use
+  <code>nolanzz/pipeline:gpu</code> together with <code>docker run --gpus all</code>.
 </p>
 <pre class="card-pre"><code>mkdir -p result
 
-apptainer run --bind "$(pwd)/result:/results" pipeline.sif \
+apptainer run --bind "$(pwd)/result:/results" pipeline-cpu.sif \
       --input_path /app/data/ALLAML_10.npz \
       --out_dir /results \
       --method EARFS \
@@ -204,7 +247,7 @@ docker run --rm \
 apptainer run \
   --bind "/absolute/path/to/data:/data" \
   --bind "$(pwd)/results:/results" \
-  pipeline.sif \
+  pipeline-cpu.sif \
   --input_path /data/my_dataset.npz \
   --out_dir /results \
   --method EARFS \
@@ -1355,23 +1398,23 @@ docker run --rm \
     <p>The simplest and fastest way to generate a feature ranking.</p>
     <pre class="card-pre"><code>mkdir -p result
 
-apptainer run --bind "$(pwd)/result:/results" pipeline.sif \
-  --input_path /app/data/ALLAML_10.npz \
-  --out_dir /results \
-  --method EARFS \
-  --name ALLAML_10_earfs_fixed \
-  --preprocess_mode external \
-  --task_type binary \
-  --is_snp 0 \
-  --selected_activate sigmoid \
-  --seed 0 \
-  --use_evaluation 0 \
-  --do_parameter_search 0 \
-  --epochs 100 \
-  --batch_size 32 \
-  --lr 0.001 \
-  --dropout 0.5 \
-  --weight_decay 0.0
+    apptainer run --bind "$(pwd)/result:/results" pipeline-cpu.sif \
+      --input_path /app/data/ALLAML_10.npz \
+      --out_dir /results \
+      --method EARFS \
+      --name ALLAML_10_earfs_fixed \
+      --preprocess_mode external \
+      --task_type binary \
+      --is_snp 0 \
+      --selected_activate sigmoid \
+      --seed 0 \
+      --use_evaluation 0 \
+      --do_parameter_search 0 \
+      --epochs 100 \
+      --batch_size 32 \
+      --lr 0.001 \
+      --dropout 0.5 \
+      --weight_decay 0.0
 </code></pre>
     <h4>Docker equivalent</h4>
     <pre class="card-pre"><code>mkdir -p result
@@ -1406,31 +1449,31 @@ docker run --rm \
     <p>Performs feature selection only, but first searches hyperparameters via Optuna.</p>
     <pre class="card-pre"><code>mkdir -p result
 
-apptainer run --bind "$(pwd)/result:/results" pipeline.sif \
-  --input_path /app/data/ALLAML_10.npz \
-  --out_dir /results \
-  --method EARFS \
-  --name ALLAML_10_earfs_optuna \
-  --preprocess_mode external \
-  --task_type binary \
-  --is_snp 0 \
-  --selected_activate sigmoid \
-  --seed 0 \
-  --use_evaluation 0 \
-  --do_parameter_search 1 \
-  --n_trials 30 \
-  --n_jobs 4 \
-  --use_cv 1 \
-  --n_splits 5 \
-  --eval_metric loss \
-  --lr_min 1e-5 \
-  --lr_max 1e-1 \
-  --dropout_min 0.2 \
-  --dropout_max 0.8 \
-  --weight_decay_min 0.0 \
-  --weight_decay_max 1e-1 \
-  --batch_size_list 8,16,32 \
-  --digits_list 100,200,500,1000
+    apptainer run --bind "$(pwd)/result:/results" pipeline-cpu.sif \
+      --input_path /app/data/ALLAML_10.npz \
+      --out_dir /results \
+      --method EARFS \
+      --name ALLAML_10_earfs_optuna \
+      --preprocess_mode external \
+      --task_type binary \
+      --is_snp 0 \
+      --selected_activate sigmoid \
+      --seed 0 \
+      --use_evaluation 0 \
+      --do_parameter_search 1 \
+      --n_trials 30 \
+      --n_jobs 4 \
+      --use_cv 1 \
+      --n_splits 5 \
+      --eval_metric loss \
+      --lr_min 1e-5 \
+      --lr_max 1e-1 \
+      --dropout_min 0.2 \
+      --dropout_max 0.8 \
+      --weight_decay_min 0.0 \
+      --weight_decay_max 1e-1 \
+      --batch_size_list 8,16,32 \
+      --digits_list 100,200,500,1000
 </code></pre>
     <h4>Docker equivalent</h4>
     <pre class="card-pre"><code>mkdir -p result
@@ -1470,7 +1513,7 @@ docker run --rm \
     <pre class="card-pre"><code># Example: CancelOut + Optuna
 mkdir -p result
 
-apptainer run --bind "$(pwd)/result:/results" pipeline.sif \
+    apptainer run --bind "$(pwd)/result:/results" pipeline-cpu.sif \
   --input_path /app/data/ALLAML_10.npz \
   --out_dir /results \
   --method CANCELOUT \
@@ -1542,20 +1585,20 @@ docker run --rm \
     </p>
     <pre class="card-pre"><code>mkdir -p result
 
-apptainer run --bind "$(pwd)/result:/results" pipeline.sif \
-  --input_path /app/data/ALLAML_10.npz \
-  --out_dir /results \
-  --method EARFS \
-  --name ALLAML_10_earfs_evaluation \
-  --preprocess_mode external \
-  --task_type binary \
-  --is_snp 0 \
-  --selected_activate sigmoid \
-  --seed 0 \
-  --use_evaluation 1 \
-  --do_parameter_search 0 \
-  --max_features 20 \
-  --feature_step 5
+    apptainer run --bind "$(pwd)/result:/results" pipeline-cpu.sif \
+      --input_path /app/data/ALLAML_10.npz \
+      --out_dir /results \
+      --method EARFS \
+      --name ALLAML_10_earfs_evaluation \
+      --preprocess_mode external \
+      --task_type binary \
+      --is_snp 0 \
+      --selected_activate sigmoid \
+      --seed 0 \
+      --use_evaluation 1 \
+      --do_parameter_search 0 \
+      --max_features 20 \
+      --feature_step 5
 </code></pre>
     <h4>Docker equivalent</h4>
     <pre class="card-pre"><code>mkdir -p result
@@ -1597,37 +1640,37 @@ docker run --rm \
     <p>First searches hyperparameters, then runs evaluation curves with the optimal configuration.</p>
     <pre class="card-pre"><code>mkdir -p result
 
-apptainer run --bind "$(pwd)/result:/results" pipeline.sif \
-  --input_path /app/data/ALLAML_10.npz \
-  --out_dir /results \
-  --method GRACES \
-  --name ALLAML_10_graces_full \
-  --preprocess_mode external \
-  --task_type binary \
-  --is_snp 0 \
-  --selected_activate sigmoid \
-  --seed 0 \
-  --use_evaluation 1 \
-  --do_parameter_search 1 \
-  --n_trials 40 \
-  --n_jobs 4 \
-  --use_cv 1 \
-  --n_splits 5 \
-  --eval_metric loss \
-  --lr_min 1e-5 \
-  --lr_max 1e-1 \
-  --dropout_min 0.2 \
-  --dropout_max 0.8 \
-  --weight_decay_min 0.0 \
-  --weight_decay_max 1e-1 \
-  --alpha_min 0.85 \
-  --alpha_max 0.99 \
-  --f_correct_list 0,0.1,0.5,0.9 \
-  --batch_size_list 8,16,32 \
-  --digits_list 100,200,500 \
-  --max_features 20 \
-  --feature_step 5 \
-  --max_features_graces 20
+    apptainer run --bind "$(pwd)/result:/results" pipeline-cpu.sif \
+      --input_path /app/data/ALLAML_10.npz \
+      --out_dir /results \
+      --method GRACES \
+      --name ALLAML_10_graces_full \
+      --preprocess_mode external \
+      --task_type binary \
+      --is_snp 0 \
+      --selected_activate sigmoid \
+      --seed 0 \
+      --use_evaluation 1 \
+      --do_parameter_search 1 \
+      --n_trials 40 \
+      --n_jobs 4 \
+      --use_cv 1 \
+      --n_splits 5 \
+      --eval_metric loss \
+      --lr_min 1e-5 \
+      --lr_max 1e-1 \
+      --dropout_min 0.2 \
+      --dropout_max 0.8 \
+      --weight_decay_min 0.0 \
+      --weight_decay_max 1e-1 \
+      --alpha_min 0.85 \
+      --alpha_max 0.99 \
+      --f_correct_list 0,0.1,0.5,0.9 \
+      --batch_size_list 8,16,32 \
+      --digits_list 100,200,500 \
+      --max_features 20 \
+      --feature_step 5 \
+      --max_features_graces 20
 </code></pre>
     <h4>Docker equivalent</h4>
     <pre class="card-pre"><code>mkdir -p result
@@ -1679,20 +1722,41 @@ docker run --rm \
     </p>
     <pre class="card-pre"><code>mkdir -p result
 
-apptainer run --bind "$(pwd)/result:/results" pipeline.sif \
-  --input_path /app/data/ALLAML_10.npz \
-  --out_dir /results \
-  --method CAE \
-  --name ALLAML_10_cae_quick \
-  --preprocess_mode external \
-  --task_type binary \
-  --is_snp 0 \
-  --selected_activate sigmoid \
-  --seed 0 \
-  --use_evaluation 0 \
-  --do_parameter_search 0 \
-  --cat_k_select 5,10,20
+    apptainer run --bind "$(pwd)/result:/results" pipeline-cpu.sif \
+      --input_path /app/data/ALLAML_10.npz \
+      --out_dir /results \
+      --method CAE \
+      --name ALLAML_10_cae_quick \
+      --preprocess_mode external \
+      --task_type binary \
+      --is_snp 0 \
+      --selected_activate sigmoid \
+      --seed 0 \
+      --use_evaluation 0 \
+      --do_parameter_search 0 \
+      --cat_k_select 5,10,20
 </code></pre>
+<h3>6.6 Running the same examples with GPU acceleration</h3>
+<p>
+  All Docker and Apptainer examples above use the CPU image by default. To run the same command with the published GPU
+  image, keep the pipeline arguments unchanged and modify only the container image and GPU runtime flag as shown below.
+</p>
+<pre class="card-pre"><code># Apptainer GPU pattern
+apptainer run --nv \
+  --bind "$(pwd)/result:/results" \
+  pipeline-gpu.sif \
+  [pipeline arguments]
+
+# Docker GPU pattern
+docker run --rm --gpus all \
+  -v "$PWD/result:/results" \
+  nolanzz/pipeline:gpu \
+  [pipeline arguments]</code></pre>
+<p class="muted">
+  GPU execution requires a compatible NVIDIA GPU and host driver. For Apptainer, use <code>--nv</code> so that the host
+  NVIDIA libraries and devices are exposed inside the container. For Docker, install and configure the NVIDIA Container
+  Toolkit and use <code>--gpus all</code>.
+</p>
     <h4>Docker equivalent</h4>
     <pre class="card-pre"><code>mkdir -p result
 
