@@ -1,5 +1,17 @@
 FROM python:3.11-slim
 
+# Build-time options.
+# CPU build example:
+#   --build-arg IMAGE_VARIANT=cpu \
+#   --build-arg TORCH_INDEX_URL=https://download.pytorch.org/whl/cpu
+#
+# NVIDIA GPU build example:
+#   --build-arg IMAGE_VARIANT=gpu \
+#   --build-arg TORCH_INDEX_URL=https://download.pytorch.org/whl/cu130
+ARG IMAGE_VARIANT=cpu
+ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/cpu
+ARG TORCH_VERSION=
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
@@ -11,11 +23,25 @@ WORKDIR /app
 ENV PIP_NO_CACHE_DIR=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app
+    PYTHONPATH=/app \
+    PIPELINE_IMAGE_VARIANT=${IMAGE_VARIANT}
 
-# Install dependencies required by the standalone pipeline.
+# Copy the dependency list first so Docker can cache dependency installation.
 COPY pipeline/requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r /app/requirements.txt
+
+# Install the requested CPU or CUDA build of PyTorch first.
+# The standalone `torch` entry is then removed from the general requirements
+# file so that pip does not replace it with a different PyTorch build.
+RUN python -m pip install --upgrade pip \
+ && if [ -n "$TORCH_VERSION" ]; then \
+      python -m pip install "torch==${TORCH_VERSION}" --index-url "${TORCH_INDEX_URL}"; \
+    else \
+      python -m pip install torch --index-url "${TORCH_INDEX_URL}"; \
+    fi \
+ && sed -E '/^[[:space:]]*torch([[:space:]]*([<>=!~].*)?)?[[:space:]]*$/d' \
+      /app/requirements.txt > /app/requirements-without-torch.txt \
+ && python -m pip install -r /app/requirements-without-torch.txt \
+ && python -c "import torch; print('Installed torch:', torch.__version__); print('CUDA build:', torch.version.cuda)"
 
 # Copy the standalone analysis pipeline, including the bundled example dataset,
 # into the image. The example dataset will be available at:

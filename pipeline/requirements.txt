@@ -2,7 +2,6 @@ numpy
 scipy
 scikit-learn
 pandas
-torch
 torch-geometric
 optuna
 tqdm
